@@ -329,10 +329,48 @@ app.delete('/api/transactions/:id', requireAuth, async (req, res) => {
   }
 });
 
-// --- Statik dosyalar / SPA ---
-app.use(express.static(path.join(__dirname, 'public')));
+// --- Statik dosyalar / SPA (cache-busting) ---
+const PUBLIC_DIR = path.join(__dirname, 'public');
+
+// Asset surumu: public dosyalarinin en yeni degisiklik zamani.
+// Her deploy/restart'ta degisir -> tarayici yeni dosyalari otomatik ceker.
+function computeAssetVersion() {
+  try {
+    const files = ['app.js', 'styles.css', 'icons.js', 'index.html', 'vendor/chart.umd.min.js'];
+    let mtime = 0;
+    for (const f of files) {
+      const p = path.join(PUBLIC_DIR, f);
+      if (fs.existsSync(p)) mtime = Math.max(mtime, fs.statSync(p).mtimeMs);
+    }
+    return Math.floor(mtime || Date.now()).toString(36);
+  } catch (e) {
+    return Date.now().toString(36);
+  }
+}
+const ASSET_VERSION = computeAssetVersion();
+
+// index.html icindeki js/css referanslarina ?v=<surum> ekle (cache-busting)
+function buildIndexHtml() {
+  const html = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf-8');
+  return html.replace(/(href|src)="([^"]+\.(?:js|css))"/g, `$1="$2?v=${ASSET_VERSION}"`);
+}
+const INDEX_HTML = buildIndexHtml();
+
+// Surumlu asset'ler uzun sureli (immutable) cache'lenebilir; URL degisince taze gelir.
+app.use(express.static(PUBLIC_DIR, {
+  index: false,
+  etag: true,
+  setHeaders: (res, filePath) => {
+    if (/\.(js|css|woff2?|png|jpe?g|svg|ico)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  },
+}));
+
+// HTML asla cache'lenmez -> her zaman guncel asset URL'lerini sunar (mobilde hard-refresh gerekmez)
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.set('Cache-Control', 'no-store, must-revalidate');
+  res.type('html').send(INDEX_HTML);
 });
 
 app.listen(PORT, () => {
