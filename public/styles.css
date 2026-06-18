@@ -201,7 +201,19 @@ select { background-image: none; }
 
 /* Category list with bars */
 .cat-list { display: flex; flex-direction: column; gap: 14px; }
-.cat-item { display: flex; flex-direction: column; gap: 7px; }
+.cat-item { display: flex; flex-direction: column; gap: 7px; cursor: pointer; transition: transform 0.06s ease, opacity 0.12s ease; }
+.cat-item:active { transform: scale(0.99); opacity: 0.75; }
+
+/* Active filter chip (İşlemler) */
+.active-filter { display: flex; }
+.filter-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--surface); border: 1px solid var(--border-strong); color: var(--text);
+  border-radius: 999px; padding: 7px 13px; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+}
+.filter-chip .ic { width: 15px; height: 15px; color: var(--accent); }
+.filter-chip b { color: var(--muted); font-weight: 700; margin-left: 1px; }
+.filter-chip:active { transform: scale(0.97); }
 .cat-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .cat-name { display: flex; align-items: center; gap: 11px; font-size: 0.94rem; font-weight: 550; min-width: 0; }
 .cat-ic { width: 34px; height: 34px; border-radius: 10px; background: var(--surface-2); display: grid; place-items: center; flex: 0 0 auto; }

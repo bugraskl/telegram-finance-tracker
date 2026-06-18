@@ -87,14 +87,40 @@ async function loadConfig() {
 // ---------------------------------------------------------------------------
 // View switching (bottom nav)
 // ---------------------------------------------------------------------------
-document.querySelectorAll('.nav-item').forEach((b) => b.addEventListener('click', () => {
-  document.querySelectorAll('.nav-item').forEach((n) => n.classList.remove('active'));
-  b.classList.add('active');
-  const v = b.dataset.view;
+let catFilter = null; // İşlemler'de aktif kategori filtresi
+
+function switchView(v) {
+  document.querySelectorAll('.nav-item').forEach((n) => n.classList.toggle('active', n.dataset.view === v));
   $('view-overview').classList.toggle('hidden', v !== 'overview');
   $('view-tx').classList.toggle('hidden', v !== 'tx');
   window.scrollTo(0, 0);
+}
+
+document.querySelectorAll('.nav-item').forEach((b) => b.addEventListener('click', () => {
+  // Sekmeye elle geçince kategori filtresini temizle
+  if (catFilter) { catFilter = null; renderActiveFilter(); renderTx(); }
+  switchView(b.dataset.view);
 }));
+
+// Gider dağılımında bir kategoriye tıklayınca o kategorinin işlemlerini göster
+window.openCategory = (key) => {
+  catFilter = key;
+  switchView('tx');
+  renderActiveFilter();
+  renderTx();
+};
+window.clearCatFilter = () => { catFilter = null; renderActiveFilter(); renderTx(); };
+
+function renderActiveFilter() {
+  const af = $('active-filter');
+  if (catFilter) {
+    af.classList.remove('hidden');
+    af.innerHTML = `<button class="filter-chip" onclick="clearCatFilter()">${catIcon('expense', catFilter)}<span>${esc(catName('expense', catFilter))}</span><b>✕</b></button>`;
+  } else {
+    af.classList.add('hidden');
+    af.innerHTML = '';
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Tarih araligi
@@ -230,7 +256,7 @@ function renderCategories() {
     const pct = total > 0 ? Math.round((v / total) * 100) : 0;
     const w = Math.max(4, Math.round((v / max) * 100));
     const color = palette[i % palette.length];
-    return `<div class="cat-item">
+    return `<div class="cat-item" onclick="openCategory('${k}')">
       <div class="cat-top">
         <div class="cat-name"><span class="cat-ic" style="color:${color}">${catIcon('expense', k)}</span>${esc(catName('expense', k))}<span class="cat-pct">%${pct}</span></div>
         <div class="cat-amt">${fmtTL(v)}</div>
@@ -279,6 +305,7 @@ function dayHeading(d) {
 function txFiltered() {
   const uf = $('user-filter').value, tf = $('type-filter').value, q = $('search').value.trim().toLowerCase();
   return periodRows().filter((r) => {
+    if (catFilter && r.category !== catFilter) return false;
     if (uf && r.user !== uf) return false;
     if (tf && r.type !== tf) return false;
     if (q) {
@@ -290,6 +317,7 @@ function txFiltered() {
 }
 
 function renderTx() {
+  renderActiveFilter();
   const rows = txFiltered().sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
   $('tx-empty').classList.toggle('hidden', rows.length > 0);
   // group by day
