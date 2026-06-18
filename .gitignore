@@ -1,0 +1,9 @@
+node_modules/
+.env
+data/
+*.jsonl
+cookies.txt
+*.tmp-*
+.DS_Store
+.idea/
+.vscode/

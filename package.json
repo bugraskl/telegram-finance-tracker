@@ -1,0 +1,20 @@
+{
+  "name": "telegram-finance-dashboard",
+  "version": "1.0.0",
+  "description": "Mobile-first web dashboard for the Telegram Finance Tracker (reads & edits expenses.jsonl)",
+  "license": "MIT",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2"
+  }
+}
