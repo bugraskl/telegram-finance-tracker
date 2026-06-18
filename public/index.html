@@ -94,6 +94,19 @@
         <div class="chart-wrap"><canvas id="chart-trend"></canvas></div>
       </section>
 
+      <!-- Pie distribution (Gider / Gelir) -->
+      <section class="panel">
+        <div class="panel-head">
+          <h3>Dağılım</h3>
+          <div class="mini-toggle" id="pie-toggle">
+            <button type="button" data-pt="expense" class="active">Gider</button>
+            <button type="button" data-pt="income">Gelir</button>
+          </div>
+        </div>
+        <div class="chart-wrap pie-wrap"><canvas id="chart-pie"></canvas></div>
+        <div id="pie-empty" class="empty hidden">Bu dönemde veri yok</div>
+      </section>
+
       <!-- Category breakdown -->
       <section class="panel">
         <div class="panel-head">

@@ -28,7 +28,11 @@ const catIcon = (t, k, cls) => icon(catIconName(t, k), cls);
 let RATES = { TL: 1, EUR: 47, USD: 41, GBP: 53 };
 let ALL = [];
 let trendChart = null;
+let pieChart = null;
+let pieType = 'expense'; // Dağılım panelinde seçili tür
 let range = { from: null, to: null, label: 'Bu Ay' };
+
+const PIE_PALETTE = ['#5eead4', '#ff7a85', '#3ddc97', '#fbbf63', '#a78bfa', '#38bdf8', '#f472b6', '#fb923c', '#4ade80', '#60a5fa', '#e879f9', '#facc15'];
 
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 0 }).format(Math.round(n));
@@ -189,7 +193,7 @@ const inRange = (r) => {
 // ---------------------------------------------------------------------------
 // Render
 // ---------------------------------------------------------------------------
-function render() { renderHero(); renderTrend(); renderCategories(); renderInstallments(); renderTx(); }
+function render() { renderHero(); renderTrend(); renderPie(); renderCategories(); renderInstallments(); renderTx(); }
 
 function periodRows() { return ALL.filter(inRange); }
 
@@ -241,6 +245,56 @@ function renderTrend() {
     },
   });
 }
+
+function renderPie() {
+  const rows = periodRows().filter((r) => r.type === pieType);
+  const byCat = {};
+  for (const r of rows) byCat[r.category] = (byCat[r.category] || 0) + toTL(r.amount, r.currency);
+  const entries = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+  const labels = entries.map(([k]) => catName(pieType, k));
+  const data = entries.map(([, v]) => Math.round(v));
+
+  const empty = $('pie-empty');
+  const canvas = $('chart-pie');
+  if (pieChart) { pieChart.destroy(); pieChart = null; }
+  if (!entries.length) {
+    empty.classList.remove('hidden');
+    canvas.style.display = 'none';
+    return;
+  }
+  empty.classList.add('hidden');
+  canvas.style.display = '';
+
+  pieChart = new Chart(canvas, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: PIE_PALETTE, borderColor: '#161a22', borderWidth: 3, hoverOffset: 6 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '62%', animation: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { color: '#8b94a5', boxWidth: 10, boxHeight: 10, usePointStyle: true, pointStyle: 'circle', padding: 12, font: { size: 12 } },
+        },
+        tooltip: {
+          callbacks: {
+            label: (c) => {
+              const total = c.dataset.data.reduce((s, x) => s + x, 0);
+              const pct = total ? Math.round((c.parsed / total) * 100) : 0;
+              return ` ${c.label}: ${fmtTL(c.parsed)} (%${pct})`;
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+document.getElementById('pie-toggle').addEventListener('click', (e) => {
+  const btn = e.target.closest('button'); if (!btn) return;
+  pieType = btn.dataset.pt;
+  document.querySelectorAll('#pie-toggle button').forEach((b) => b.classList.toggle('active', b === btn));
+  renderPie();
+});
 
 function renderCategories() {
   const rows = periodRows().filter((r) => r.type === 'expense');
