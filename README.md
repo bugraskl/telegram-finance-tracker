@@ -41,10 +41,7 @@ flowchart LR
 
 | Özet / Overview | İşlemler / Transactions | Kayıt Ekle / Add |
 |---|---|---|
-| ![overview](docs/screenshots/overview.png) | ![transactions](docs/screenshots/transactions.png) | ![add](docs/screenshots/add.png) |
-
-> Kendi ekran görüntülerinizi `docs/screenshots/` klasörüne ekleyin.
-> Drop your own screenshots into `docs/screenshots/`.
+| ![overview](docs/screenshots/overview.jpeg) | ![transactions](docs/screenshots/transactions.jpeg) | ![add](docs/screenshots/add.jpeg) |
 
 ---
 

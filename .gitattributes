@@ -4,6 +4,7 @@
 # Binary assets
 *.png binary
 *.jpg binary
+*.jpeg binary
 *.ico binary
 
 # Mark vendored libraries (excluded from language stats)
