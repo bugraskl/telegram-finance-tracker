@@ -198,6 +198,12 @@ select { background-image: none; }
 .h-ic .ic { width: 18px; height: 18px; }
 .panel-sub { color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
 .chart-wrap { position: relative; height: 230px; }
+.pie-wrap { height: 300px; }
+
+/* Small segmented toggle (panel header) */
+.mini-toggle { display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 3px; gap: 2px; }
+.mini-toggle button { border: none; background: transparent; color: var(--muted); padding: 6px 13px; border-radius: 8px; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: color 0.12s ease; }
+.mini-toggle button.active { background: var(--surface); color: var(--text); }
 
 /* Category list with bars */
 .cat-list { display: flex; flex-direction: column; gap: 14px; }
