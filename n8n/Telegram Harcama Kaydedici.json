@@ -1,0 +1,307 @@
+{
+  "name": "Telegram Finans Asistanı",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [-400, 0],
+      "id": "tg-trigger-001",
+      "name": "Telegram Trigger",
+      "webhookId": "expense-logger-webhook",
+      "credentials": {
+        "telegramApi": {
+          "id": "PUT_YOUR_TELEGRAM_CRED_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash",
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [-100, 400],
+      "id": "gemini-model-001",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "PUT_YOUR_GEMINI_CRED_ID",
+          "name": "Google Gemini API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Bugünün tarihi: {{ $now.setZone('Europe/Istanbul').toFormat('yyyy-MM-dd') }} ({{ $now.setZone('Europe/Istanbul').toFormat('cccc') }})\n\nKullanıcı mesajı: \"{{ $json.message.text }}\"\nGönderen: {{ $json.message.from.first_name }}\n\nBu mesajı 5 türden birine sınıflandır:\n\n1. EXPENSE — gider/harcama (\"100 tl market\", \"kahve 50\", \"akşam yemeği 250 lira\")\n2. INCOME — gelir (\"maaş 50000\", \"freelance 3000\", \"kira geldi 15000\", \"bonus 2000\")\n3. QUERY — sorgu/rapor (\"bugün ne harcadık\", \"bu ay gelir\", \"tasarruf oranı\", \"bakiye\", \"geçen hafta yemek\")\n4. DELETE — kayıt silme (\"100 tl harcamayı sil\", \"market harcamasını sil\", \"son kaydı sil\", \"dünkü 50 tl giderini sil\", \"1085 tl ramı sil\")\n5. CHAT — diğer her şey (\"merhaba\", \"iyi geceler\")\n\nDELETE TESPİTİ:\n- \"sil\", \"kaldır\", \"iptal\", \"yanlış girdim\", \"hatalı\" → DELETE\n- \"son\", \"sonuncu\", \"en son\" geçiyorsa → delete_last: true\n- Tutar belirtilmişse → amount\n- Kategori belirtilmişse → category_filter\n- Açıklama/ürün ismi geçiyorsa → description_filter (örn: \"ram\", \"market alışverişi\")\n- Tarih geçiyorsa → date_from/date_to (yoksa null)\n\nGELİR/GİDER AYIRTETME İPUÇLARI:\n- \"geldi\", \"kazandım\", \"aldım\", \"yatırdı\", \"yattı\" → INCOME\n- \"verdim\", \"ödedim\", \"harcadım\" → EXPENSE\n- \"maaş\", \"freelance\", \"bonus\", \"kira geldi\", \"satış\", \"getiri\" → INCOME\n- \"market\", \"yemek\", \"yakıt\", \"fatura\" → EXPENSE\n- Belirsizse default EXPENSE\n\nTAKSİT TESPİTİ (sadece EXPENSE):\n- \"X taksit\", \"X taksitle\", \"X taksit böldüm\", \"X taksit yaptım\" → installments: X\n- Taksit belirtilmemişse → installments: 1\n\nÇıktı: SADECE saf JSON, markdown veya kod bloğu YOK.\n\nEXPENSE için:\n{\n  \"type\": \"expense\",\n  \"amount\": <sayı>,\n  \"currency\": \"TL\"|\"EUR\"|\"USD\"|\"GBP\",\n  \"category\": \"<gider kategorisi>\",\n  \"description\": \"...\",\n  \"installments\": <taksit sayısı, belirtilmemişse 1>,\n  \"confidence\": <0-1>\n}\n\nINCOME için:\n{\n  \"type\": \"income\",\n  \"amount\": <sayı>,\n  \"currency\": \"TL\"|\"EUR\"|\"USD\"|\"GBP\",\n  \"category\": \"<gelir kategorisi>\",\n  \"description\": \"...\",\n  \"confidence\": <0-1>\n}\n\nQUERY için:\n{\n  \"type\": \"query\",\n  \"date_from\": \"YYYY-MM-DD\",\n  \"date_to\": \"YYYY-MM-DD\",\n  \"category_filter\": \"<kategori>\"|null,\n  \"user_filter\": \"<isim>\"|null,\n  \"transaction_filter\": \"both\"|\"expense\"|\"income\",\n  \"query_label\": \"<kısa Türkçe etiket>\"\n}\n\nDELETE için:\n{\n  \"type\": \"delete\",\n  \"amount\": <sayı>|null,\n  \"currency\": \"TL\"|\"EUR\"|\"USD\"|\"GBP\"|null,\n  \"category_filter\": \"<kategori>\"|null,\n  \"description_filter\": \"<arama metni>\"|null,\n  \"date_from\": \"YYYY-MM-DD\"|null,\n  \"date_to\": \"YYYY-MM-DD\"|null,\n  \"transaction_filter\": \"expense\"|\"income\"|\"both\",\n  \"delete_last\": true|false\n}\n\nCHAT için:\n{\n  \"type\": \"chat\"\n}\n\nGİDER KATEGORİLERİ:\nyemek, market, ulasim, fatura, eglence, saglik, giyim, ev_mobilya, egitim, tatil, kisisel_bakim, abonelik, hediye, yakit, evcil_hayvan, kira_odeme, vergi, diger\n\nGELİR KATEGORİLERİ:\nmaas, freelance, kira_geliri, yatirim_getirisi, bonus, satis, hediye_gelir, iade, faiz, diger_gelir\n\nTARİH KURALLARI (bugünden referans):\n- \"bugün\" → from=to=bugün\n- \"dün\" → from=to=dün\n- \"son N gün\" → from=bugün-N, to=bugün\n- \"bu hafta\" → bu pazartesi-bugün\n- \"geçen hafta\" → önceki pazartesi-pazar\n- \"bu ay\" → ayın 1'i-bugün\n- \"geçen ay\" → önceki ayın 1'i-sonu\n- Ay adı (\"ocak\", \"şubat\") → o ayın 1-30/31, yıl bu yıl\n- \"01.05.2026\" → from=to=tarih\n- \"01.05 - 10.05\" → range\n- Tarih belirtilmemişse → bu ay\n\nQUERY transaction_filter:\n- \"gelir\", \"kazanç\", \"gelirler\" → \"income\"\n- \"gider\", \"harcama\", \"masraf\" → \"expense\"\n- \"net\", \"bakiye\", \"durum\", \"özet\", \"tasarruf\" → \"both\"\n- Belirsizse \"both\"\n\nÖRNEKLER:\n- \"100 tl market\" → {\"type\":\"expense\",\"amount\":100,\"currency\":\"TL\",\"category\":\"market\",\"description\":\"market\",\"installments\":1,\"confidence\":0.95}\n- \"1085 tlye 8gb ddr3 ram aldım 3 taksit böldüm\" → {\"type\":\"expense\",\"amount\":1085,\"currency\":\"TL\",\"category\":\"diger\",\"description\":\"8gb ddr3 ram ve çift taraflı bant\",\"installments\":3,\"confidence\":0.95}\n- \"maaş yattı 50000\" → {\"type\":\"income\",\"amount\":50000,\"currency\":\"TL\",\"category\":\"maas\",\"description\":\"maaş\",\"confidence\":0.98}\n- \"freelance 3000 dolar\" → {\"type\":\"income\",\"amount\":3000,\"currency\":\"USD\",\"category\":\"freelance\",\"description\":\"freelance proje\",\"confidence\":0.95}\n- \"kira geldi 15000\" → {\"type\":\"income\",\"amount\":15000,\"currency\":\"TL\",\"category\":\"kira_geliri\",\"description\":\"kira\",\"confidence\":0.95}\n- \"bu ay net\" → {\"type\":\"query\",\"date_from\":\"2026-05-01\",\"date_to\":\"2026-05-10\",\"category_filter\":null,\"user_filter\":null,\"transaction_filter\":\"both\",\"query_label\":\"Mayıs 2026 - Net Durum\"}\n- \"tasarruf oranımız ne\" → {\"type\":\"query\",\"date_from\":\"2026-05-01\",\"date_to\":\"2026-05-10\",\"category_filter\":null,\"user_filter\":null,\"transaction_filter\":\"both\",\"query_label\":\"Tasarruf Durumu\"}\n- \"100 tl market harcamasını sil\" → {\"type\":\"delete\",\"amount\":100,\"currency\":\"TL\",\"category_filter\":\"market\",\"description_filter\":null,\"date_from\":null,\"date_to\":null,\"transaction_filter\":\"expense\",\"delete_last\":false}\n- \"son harcamayı sil\" → {\"type\":\"delete\",\"amount\":null,\"currency\":null,\"category_filter\":null,\"description_filter\":null,\"date_from\":null,\"date_to\":null,\"transaction_filter\":\"expense\",\"delete_last\":true}\n- \"son kaydı sil\" → {\"type\":\"delete\",\"amount\":null,\"currency\":null,\"category_filter\":null,\"description_filter\":null,\"date_from\":null,\"date_to\":null,\"transaction_filter\":\"both\",\"delete_last\":true}\n- \"1085 tl ramı sil\" → {\"type\":\"delete\",\"amount\":1085,\"currency\":\"TL\",\"category_filter\":null,\"description_filter\":\"ram\",\"date_from\":null,\"date_to\":null,\"transaction_filter\":\"expense\",\"delete_last\":false}\n- \"dünkü maaşı sil\" → {\"type\":\"delete\",\"amount\":null,\"currency\":null,\"category_filter\":\"maas\",\"description_filter\":null,\"date_from\":\"2026-05-22\",\"date_to\":\"2026-05-22\",\"transaction_filter\":\"income\",\"delete_last\":false}\n- \"merhaba\" → {\"type\":\"chat\"}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [-100, 0],
+      "id": "classify-001",
+      "name": "Mesajı Sınıflandır",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "let rawText = $input.first().json.text;\nrawText = rawText.replace(/^```(?:json)?\\s*|\\s*```$/g, '').trim();\nconst startIdx = rawText.indexOf('{');\nconst endIdx = rawText.lastIndexOf('}');\nif (startIdx !== -1 && endIdx !== -1) {\n  rawText = rawText.substring(startIdx, endIdx + 1);\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(rawText);\n} catch (e) {\n  parsed = { type: 'chat' };\n}\n\nconst msg = $('Telegram Trigger').first().json.message;\nconst sender = msg.from.first_name + (msg.from.last_name ? ' ' + msg.from.last_name : '');\nconst chatId = msg.chat.id;\nconst messageId = msg.message_id;\nconst messageText = msg.text;\n\nconst now = new Date();\nconst istanbulISO = now.toLocaleString('sv-SE', { timeZone: 'Europe/Istanbul' });\n\nreturn [{\n  json: {\n    ...parsed,\n    sender,\n    chatId,\n    messageId,\n    rawMessage: messageText,\n    timestamp: istanbulISO\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [200, 0],
+      "id": "parse-and-enrich-001",
+      "name": "JSON Parse + Metadata"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "expense",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "expense"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "income",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "income"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "query",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "query"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "delete",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "delete"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [500, 0],
+      "id": "switch-router-001",
+      "name": "Tür Yönlendir"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst d = $input.first().json;\nconst filePath = '/data/downloads/expenses.jsonl';\n\nconst installments = (d.installments && parseInt(d.installments) > 1) ? parseInt(d.installments) : 1;\nconst amountPerInstallment = Math.round((d.amount / installments) * 100) / 100;\n\n// Adds N months to an Istanbul-formatted date string \"YYYY-MM-DD HH:mm:ss\" without TZ conversion issues\nfunction addMonths(dateStr, months) {\n  const [datePart, timePart] = dateStr.split(' ');\n  const [y, m, day] = datePart.split('-').map(Number);\n  let totalMonths = (m - 1) + months;\n  const newYear = y + Math.floor(totalMonths / 12);\n  const newMonth = totalMonths % 12; // 0-indexed\n  const maxDay = new Date(newYear, newMonth + 1, 0).getDate();\n  const newDay = Math.min(day, maxDay);\n  return `${newYear}-${String(newMonth + 1).padStart(2, '0')}-${String(newDay).padStart(2, '0')} ${timePart}`;\n}\n\nfor (let i = 0; i < installments; i++) {\n  const ts = addMonths(d.timestamp, i);\n  const desc = installments > 1 ? `${d.description} (${i + 1}/${installments}. taksit)` : d.description;\n  const record = {\n    type: d.type,\n    ts,\n    user: d.sender,\n    amount: amountPerInstallment,\n    currency: d.currency,\n    category: d.category,\n    description: desc,\n    raw: d.rawMessage,\n    confidence: d.confidence\n  };\n  if (installments > 1) {\n    record.installment_total = d.amount;\n    record.installment_index = i + 1;\n    record.installment_count = installments;\n  }\n  fs.appendFileSync(filePath, JSON.stringify(record) + '\\n');\n}\n\nconst confirmMessage = installments > 1\n  ? `💸 <b>${d.amount} ${d.currency}</b> gider <b>${installments} taksit</b> olarak kaydedildi\\n📅 Aylık taksit: <b>${amountPerInstallment} ${d.currency}</b>\\n📂 Kategori: <i>${d.category}</i>\\n📝 ${d.description}\\n👤 ${d.sender}`\n  : `${d.type === 'expense' ? '💸' : '💰'} <b>${d.amount} ${d.currency}</b> ${d.type === 'expense' ? 'gider' : 'gelir'} olarak kaydedildi\\n📂 Kategori: <i>${d.category}</i>\\n📝 ${d.description}\\n👤 ${d.sender}`;\n\nreturn [{ json: { ...d, saved: true, installments, amountPerInstallment, confirmMessage } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, -100],
+      "id": "save-tx-001",
+      "name": "İşlem Kaydet"
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.confirmMessage }}",
+        "additionalFields": {
+          "parse_mode": "HTML",
+          "reply_to_message_id": "={{ $json.messageId }}"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1100, -100],
+      "id": "reply-confirm-001",
+      "name": "İşlem Onayı",
+      "credentials": {
+        "telegramApi": {
+          "id": "PUT_YOUR_TELEGRAM_CRED_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Sorguyu çalıştır: gelir + gider + net analizi\nconst fs = require('fs');\nconst filePath = '/data/downloads/expenses.jsonl';\nconst q = $input.first().json;\n\nif (!fs.existsSync(filePath)) {\n  return [{ json: { ...q, empty: true, reason: 'Henüz kayıt yok' } }];\n}\n\nconst content = fs.readFileSync(filePath, 'utf-8');\nconst lines = content.trim().split('\\n').filter(l => l.length > 0);\nconst all = lines.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);\n\n// Backward compat: type yoksa expense kabul et\nall.forEach(r => { if (!r.type) r.type = 'expense'; });\n\nconst dateFrom = q.date_from;\nconst dateTo = q.date_to;\n\nlet filtered = all.filter(e => {\n  if (!e.ts) return false;\n  const d = e.ts.split(' ')[0];\n  return d >= dateFrom && d <= dateTo;\n});\n\nif (q.category_filter) filtered = filtered.filter(e => e.category === q.category_filter);\nif (q.user_filter) filtered = filtered.filter(e => e.user.toLowerCase().includes(q.user_filter.toLowerCase()));\n\nconst rates = { TL: 1, EUR: 47, USD: 41, GBP: 53 };\nconst toTL = (a, c) => a * (rates[c] || 1);\n\nlet totalExpenseTL = 0, totalIncomeTL = 0;\nconst expenseByCategory = {}, incomeByCategory = {};\nconst byUser = {};\n\nfor (const e of filtered) {\n  const tl = toTL(e.amount, e.currency);\n  if (e.type === 'expense') {\n    totalExpenseTL += tl;\n    if (!expenseByCategory[e.category]) expenseByCategory[e.category] = { totalTL: 0, count: 0 };\n    expenseByCategory[e.category].totalTL += tl;\n    expenseByCategory[e.category].count += 1;\n  } else if (e.type === 'income') {\n    totalIncomeTL += tl;\n    if (!incomeByCategory[e.category]) incomeByCategory[e.category] = { totalTL: 0, count: 0 };\n    incomeByCategory[e.category].totalTL += tl;\n    incomeByCategory[e.category].count += 1;\n  }\n  if (!byUser[e.user]) byUser[e.user] = { expenseTL: 0, incomeTL: 0 };\n  if (e.type === 'expense') byUser[e.user].expenseTL += tl;\n  else if (e.type === 'income') byUser[e.user].incomeTL += tl;\n}\n\n// Round\nfor (const k of Object.keys(expenseByCategory)) expenseByCategory[k].totalTL = Math.round(expenseByCategory[k].totalTL);\nfor (const k of Object.keys(incomeByCategory)) incomeByCategory[k].totalTL = Math.round(incomeByCategory[k].totalTL);\nfor (const u of Object.keys(byUser)) {\n  byUser[u].expenseTL = Math.round(byUser[u].expenseTL);\n  byUser[u].incomeTL = Math.round(byUser[u].incomeTL);\n  byUser[u].netTL = byUser[u].incomeTL - byUser[u].expenseTL;\n}\n\nconst netTL = totalIncomeTL - totalExpenseTL;\nconst savingsRate = totalIncomeTL > 0 ? Math.round((netTL / totalIncomeTL) * 100) : null;\n\nconst topExpenses = filtered\n  .filter(e => e.type === 'expense')\n  .map(e => ({ ...e, tl: Math.round(toTL(e.amount, e.currency)) }))\n  .sort((a, b) => b.tl - a.tl)\n  .slice(0, 10);\n\nconst topIncomes = filtered\n  .filter(e => e.type === 'income')\n  .map(e => ({ ...e, tl: Math.round(toTL(e.amount, e.currency)) }))\n  .sort((a, b) => b.tl - a.tl)\n  .slice(0, 10);\n\nconst expenseCount = filtered.filter(e => e.type === 'expense').length;\nconst incomeCount = filtered.filter(e => e.type === 'income').length;\n\nreturn [{\n  json: {\n    ...q,\n    empty: filtered.length === 0,\n    expenseCount,\n    incomeCount,\n    totalExpenseTL: Math.round(totalExpenseTL),\n    totalIncomeTL: Math.round(totalIncomeTL),\n    netTL: Math.round(netTL),\n    savingsRate,\n    expenseByCategory,\n    incomeByCategory,\n    byUser,\n    topExpenses,\n    topIncomes\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 100],
+      "id": "run-query-001",
+      "name": "Sorguyu Çalıştır"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Telegram'a gönderilecek kısa, samimi bir Türkçe finans cevabı üret.\n\nORİJİNAL SORU: \"{{ $json.rawMessage }}\"\nETIKET: {{ $json.query_label }}\nTARİH ARALIĞI: {{ $json.date_from }} → {{ $json.date_to }}\nFİLTRE: tx={{ $json.transaction_filter }}, kat={{ $json.category_filter || 'hepsi' }}, kullanıcı={{ $json.user_filter || 'hepsi' }}\nKAYIT YOK MU: {{ $json.empty }}\n\nVERİLER:\nToplam Gider: {{ $json.totalExpenseTL }} TL ({{ $json.expenseCount }} kayıt)\nToplam Gelir: {{ $json.totalIncomeTL }} TL ({{ $json.incomeCount }} kayıt)\nNET: {{ $json.netTL }} TL\nTasarruf oranı: {{ $json.savingsRate }}%\n\nGİDER KATEGORİK:\n{{ JSON.stringify($json.expenseByCategory) }}\n\nGELİR KATEGORİK:\n{{ JSON.stringify($json.incomeByCategory) }}\n\nKULLANICI BAZLI:\n{{ JSON.stringify($json.byUser) }}\n\nEN PAHALI 5 GİDER:\n{{ JSON.stringify($json.topExpenses.slice(0, 5)) }}\n\nEN BÜYÜK 5 GELİR:\n{{ JSON.stringify($json.topIncomes.slice(0, 5)) }}\n\n=================================\nFORMAT KURALLARI\n=================================\n\n1. transaction_filter'a göre içerik:\n   - \"expense\" → sadece gider odaklı (gelir gösterme)\n   - \"income\" → sadece gelir odaklı\n   - \"both\" → gelir + gider + net + tasarruf oranı göster\n\n2. Net pozitifse 💰, negatifse ⚠️, sıfır civarıysa 📊\n\n3. Tasarruf oranı yorumu (only when transaction_filter='both'):\n   - %30+ → \"mükemmel\"\n   - %20-30 → \"sağlıklı\"\n   - %10-20 → \"orta\"\n   - %0-10 → \"düşük\"\n   - <%0 → \"açık veriyor, dikkat\"\n\nTELEGRAM HTML — SADECE BUNLARI KULLAN:\n<b>kalın</b>, <i>italik</i>, <u>altı çizili</u>, <code>kod</code>, <pre>blok</pre>, <a>link</a>\n\nKESİNLİKLE KULLANMA: <ul>, <ol>, <li>, <table>, <tr>, <td>, <h1>, <h2>, <h3>, <p>, <div>, <br>, <hr>, <img>, <span>\n\nLİSTE FORMATİ: \"• \" karakteri kullan, satır sonu için \\n.\n\nÖrnek (transaction_filter=\"both\"):\n📊 <b>Mayıs 2026</b>\n\n💰 Gelir: <b>50.000 TL</b>\n💸 Gider: <b>32.000 TL</b>\n💎 Net: <b>+18.000 TL</b>\n🎯 Tasarruf oranı: <b>%36</b> (mükemmel)\n\n<b>Top giderler:</b>\n• Yemek: 8.500 TL\n• Market: 6.200 TL\n• Yakıt: 4.100 TL\n\nÖrnek (transaction_filter=\"expense\"):\n💸 <b>Bu Hafta Giderler</b>\n\nToplam: <b>3.450 TL</b> (12 kayıt)\n\n<b>Kategoriler:</b>\n• Yemek: 1.200 TL\n• Market: 850 TL\n• Yakıt: 600 TL\n\nKAYIT YOK durumunda: \"📭 Bu aralıkta kayıt bulunamadı\"\n\nMax 20 satır, kısa ve net.\n\nÇıktı: SADECE final mesaj, başka hiçbir şey yazma.",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [1100, 100],
+      "id": "format-answer-001",
+      "name": "Cevabı Formatla",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "chatId": "={{ $('JSON Parse + Metadata').first().json.chatId }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "parse_mode": "HTML",
+          "reply_to_message_id": "={{ $('JSON Parse + Metadata').first().json.messageId }}"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1400, 100],
+      "id": "send-query-answer-001",
+      "name": "Sorgu Cevabı",
+      "credentials": {
+        "telegramApi": {
+          "id": "PUT_YOUR_TELEGRAM_CRED_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst filePath = '/data/downloads/expenses.jsonl';\nconst q = $input.first().json;\n\nif (!fs.existsSync(filePath)) {\n  return [{ json: { ...q, message: '📭 Henüz hiç kayıt yok, silinecek bir şey bulunamadı.' } }];\n}\n\nconst content = fs.readFileSync(filePath, 'utf-8');\nconst lines = content.split('\\n').filter(l => l.length > 0);\nconst records = lines.map((l, i) => {\n  try {\n    const r = JSON.parse(l);\n    r._idx = i;\n    if (!r.type) r.type = 'expense';\n    return r;\n  } catch { return null; }\n}).filter(Boolean);\n\nconst searchAmount = (q.amount !== null && q.amount !== undefined) ? parseFloat(q.amount) : null;\n\nlet candidates = records.filter(r => {\n  if (q.transaction_filter && q.transaction_filter !== 'both' && r.type !== q.transaction_filter) return false;\n  if (q.category_filter && r.category !== q.category_filter) return false;\n  if (q.currency && r.currency !== q.currency) return false;\n  if (q.date_from && r.ts && r.ts.split(' ')[0] < q.date_from) return false;\n  if (q.date_to && r.ts && r.ts.split(' ')[0] > q.date_to) return false;\n  if (searchAmount !== null) {\n    if (r.amount !== searchAmount && r.installment_total !== searchAmount) return false;\n  }\n  if (q.description_filter) {\n    const f = q.description_filter.toLowerCase();\n    if (!r.description || !r.description.toLowerCase().includes(f)) return false;\n  }\n  return true;\n});\n\nif (q.delete_last && candidates.length > 0) {\n  candidates.sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));\n  candidates = [candidates[0]];\n}\n\n// Group installment rows together\nfunction groupKey(r) {\n  if (r.installment_total) {\n    const baseDesc = (r.description || '').split(' (')[0];\n    return `inst:${r.user}:${r.installment_total}:${baseDesc}`;\n  }\n  return `single:${r._idx}`;\n}\n\nconst groupsMap = {};\nfor (const c of candidates) {\n  const k = groupKey(c);\n  if (!groupsMap[k]) groupsMap[k] = [];\n  groupsMap[k].push(c);\n}\n// For installment groups, also pull in sibling rows that match the group (in case filter only caught one taksit row)\nfor (const k of Object.keys(groupsMap)) {\n  if (!k.startsWith('inst:')) continue;\n  const first = groupsMap[k][0];\n  const baseDesc = (first.description || '').split(' (')[0];\n  const siblings = records.filter(r => r.installment_total === first.installment_total && r.user === first.user && (r.description || '').split(' (')[0] === baseDesc);\n  groupsMap[k] = siblings;\n}\nconst groupList = Object.values(groupsMap);\n\nlet message;\nif (groupList.length === 0) {\n  message = '📭 Eşleşen kayıt bulunamadı. Filtreleri kontrol et (tutar/kategori/tarih).';\n} else if (groupList.length === 1) {\n  const group = groupList[0];\n  const toRemove = new Set(group.map(r => r._idx));\n  const remaining = records.filter(r => !toRemove.has(r._idx)).map(r => {\n    const { _idx, ...rest } = r;\n    return JSON.stringify(rest);\n  });\n  fs.writeFileSync(filePath, remaining.length ? remaining.join('\\n') + '\\n' : '');\n\n  const first = group[0];\n  const emoji = first.type === 'income' ? '💰' : '💸';\n  const label = first.type === 'income' ? 'gelir' : 'gider';\n  if (group.length > 1 && first.installment_total) {\n    const baseDesc = (first.description || '').split(' (')[0];\n    message = `🗑 ${emoji} <b>${first.installment_total} ${first.currency}</b> taksitli ${label} silindi (<b>${group.length} taksit</b>)\\n📂 Kategori: <i>${first.category}</i>\\n📝 ${baseDesc}\\n👤 ${first.user}`;\n  } else {\n    const dateStr = (first.ts || '').split(' ')[0];\n    message = `🗑 ${emoji} <b>${first.amount} ${first.currency}</b> ${label} silindi\\n📂 Kategori: <i>${first.category}</i>\\n📝 ${first.description}\\n📅 ${dateStr}\\n👤 ${first.user}`;\n  }\n} else {\n  const previews = groupList.slice(0, 8).map((g, i) => {\n    const r = g[0];\n    const dateStr = (r.ts || '').split(' ')[0];\n    const emoji = r.type === 'income' ? '💰' : '💸';\n    const amt = r.installment_total || r.amount;\n    const note = r.installment_total ? ` (${g.length} taksit)` : '';\n    const desc = r.installment_total ? (r.description || '').split(' (')[0] : (r.description || '');\n    return `${i + 1}) ${emoji} <b>${amt} ${r.currency}</b> — <i>${r.category}</i> — ${dateStr} — ${r.user}${note}\\n   ${desc}`;\n  }).join('\\n');\n  const extra = groupList.length > 8 ? `\\n... ve <b>${groupList.length - 8}</b> kayıt daha` : '';\n  message = `🤔 <b>${groupList.length} eşleşen kayıt</b> bulundu. Lütfen daha spesifik ol:\\n\\n${previews}${extra}\\n\\n💡 İpucu: kategori, tarih veya açıklama ekle (örn: \"20 mayıs market 100 tl sil\")`;\n}\n\nreturn [{ json: { ...q, message } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 300],
+      "id": "delete-tx-001",
+      "name": "Kaydı Sil"
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "parse_mode": "HTML",
+          "reply_to_message_id": "={{ $json.messageId }}"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1100, 300],
+      "id": "reply-delete-001",
+      "name": "Silme Onayı",
+      "credentials": {
+        "telegramApi": {
+          "id": "PUT_YOUR_TELEGRAM_CRED_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [{ "node": "Mesajı Sınıflandır", "type": "main", "index": 0 }]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          { "node": "Mesajı Sınıflandır", "type": "ai_languageModel", "index": 0 },
+          { "node": "Cevabı Formatla", "type": "ai_languageModel", "index": 0 }
+        ]
+      ]
+    },
+    "Mesajı Sınıflandır": {
+      "main": [
+        [{ "node": "JSON Parse + Metadata", "type": "main", "index": 0 }]
+      ]
+    },
+    "JSON Parse + Metadata": {
+      "main": [
+        [{ "node": "Tür Yönlendir", "type": "main", "index": 0 }]
+      ]
+    },
+    "Tür Yönlendir": {
+      "main": [
+        [{ "node": "İşlem Kaydet", "type": "main", "index": 0 }],
+        [{ "node": "İşlem Kaydet", "type": "main", "index": 0 }],
+        [{ "node": "Sorguyu Çalıştır", "type": "main", "index": 0 }],
+        [{ "node": "Kaydı Sil", "type": "main", "index": 0 }]
+      ]
+    },
+    "İşlem Kaydet": {
+      "main": [
+        [{ "node": "İşlem Onayı", "type": "main", "index": 0 }]
+      ]
+    },
+    "Sorguyu Çalıştır": {
+      "main": [
+        [{ "node": "Cevabı Formatla", "type": "main", "index": 0 }]
+      ]
+    },
+    "Cevabı Formatla": {
+      "main": [
+        [{ "node": "Sorgu Cevabı", "type": "main", "index": 0 }]
+      ]
+    },
+    "Kaydı Sil": {
+      "main": [
+        [{ "node": "Silme Onayı", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

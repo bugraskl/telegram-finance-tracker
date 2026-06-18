@@ -1,0 +1,24 @@
+services:
+  finance-dashboard:
+    build: .
+    container_name: finance-dashboard
+    restart: unless-stopped
+    # Run as the same uid:gid that owns the data file (n8n default = 1000:1000).
+    # This keeps the JSONL writable by BOTH the n8n bot and this dashboard.
+    # Aynı uid:gid altında çalış (n8n varsayılanı 1000) — böylece JSONL hem bot
+    # hem dashboard tarafından yazılabilir kalır.
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    ports:
+      - "${APP_PORT:-8095}:8080"
+    environment:
+      APP_USERNAME: ${APP_USERNAME:-admin}
+      APP_PASSWORD: ${APP_PASSWORD:?APP_PASSWORD is required}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+      EXPENSES_FILE: /data/downloads/expenses.jsonl
+      TOKEN_TTL_DAYS: ${TOKEN_TTL_DAYS:-30}
+      # CURRENCY_RATES: '{"EUR":47,"USD":41,"GBP":53}'
+    volumes:
+      # Host folder that the n8n bot writes expenses.jsonl into
+      # (the folder mapped to /data/downloads inside the n8n container).
+      # n8n botunun expenses.jsonl yazdığı host klasörü.
+      - ${N8N_DOWNLOADS_DIR:-./data/downloads}:/data/downloads

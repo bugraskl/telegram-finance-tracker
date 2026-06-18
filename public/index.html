@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0d0f14" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Finans</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💸</text></svg>" />
+</head>
+<body>
+
+  <!-- LOGIN -->
+  <div id="login-screen" class="login-screen hidden">
+    <form id="login-form" class="login-card">
+      <div class="login-logo" data-icon="wallet"></div>
+      <h1>Finans</h1>
+      <p class="login-sub">Hesabına giriş yap</p>
+      <label class="field">
+        <span>Kullanıcı adı</span>
+        <input id="login-user" type="text" autocomplete="username" autocapitalize="off" />
+      </label>
+      <label class="field">
+        <span>Şifre</span>
+        <input id="login-pass" type="password" autocomplete="current-password" />
+      </label>
+      <button type="submit" class="btn btn-primary btn-block">Giriş Yap</button>
+      <div id="login-error" class="form-error"></div>
+    </form>
+  </div>
+
+  <!-- APP -->
+  <div id="app" class="app hidden">
+
+    <!-- Sticky header: brand + period chips -->
+    <header class="appbar">
+      <div class="appbar-row">
+        <div class="appbar-title">Finans</div>
+        <button id="logout-btn" class="icon-btn" title="Çıkış" aria-label="Çıkış" data-icon="log-out"></button>
+      </div>
+      <div class="period-scroll" id="range-presets">
+        <button data-range="thisMonth" class="chip active">Bu Ay</button>
+        <button data-range="lastMonth" class="chip">Geçen Ay</button>
+        <button data-range="last3" class="chip">Son 3 Ay</button>
+        <button data-range="thisYear" class="chip">Bu Yıl</button>
+        <button data-range="all" class="chip">Tümü</button>
+        <button data-range="custom" class="chip" id="chip-custom">Özel</button>
+      </div>
+      <div class="custom-range hidden" id="custom-range">
+        <input type="date" id="date-from" />
+        <span class="dash">→</span>
+        <input type="date" id="date-to" />
+      </div>
+    </header>
+
+    <!-- ======== ÖZET ======== -->
+    <main id="view-overview" class="view">
+      <!-- Hero net card -->
+      <section class="hero">
+        <div class="hero-period" id="hero-period">Bu Ay</div>
+        <div class="hero-net" id="hero-net">—</div>
+        <div class="hero-netlabel" id="hero-netlabel">net bakiye</div>
+        <div class="hero-split">
+          <div class="hs-item">
+            <span class="hs-dot dot-income"></span>
+            <div>
+              <div class="hs-label">Gelir</div>
+              <div class="hs-val" id="hero-income">—</div>
+            </div>
+          </div>
+          <div class="hs-sep"></div>
+          <div class="hs-item">
+            <span class="hs-dot dot-expense"></span>
+            <div>
+              <div class="hs-label">Gider</div>
+              <div class="hs-val" id="hero-expense">—</div>
+            </div>
+          </div>
+          <div class="hs-sep"></div>
+          <div class="hs-item">
+            <div>
+              <div class="hs-label">Tasarruf</div>
+              <div class="hs-val" id="hero-save">—</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Trend -->
+      <section class="panel">
+        <div class="panel-head"><h3>Aylık Gelir / Gider</h3></div>
+        <div class="chart-wrap"><canvas id="chart-trend"></canvas></div>
+      </section>
+
+      <!-- Category breakdown -->
+      <section class="panel">
+        <div class="panel-head">
+          <h3>Gider Dağılımı</h3>
+          <span class="panel-sub" id="cat-total"></span>
+        </div>
+        <div id="cat-list" class="cat-list"></div>
+        <div id="cat-empty" class="empty hidden">Bu dönemde gider yok</div>
+      </section>
+
+      <!-- Installments -->
+      <section class="panel hidden" id="installments-section">
+        <div class="panel-head"><h3><span class="h-ic" data-icon="calendar-clock"></span>Yaklaşan Taksitler</h3></div>
+        <div id="installments-list" class="inst-list"></div>
+      </section>
+    </main>
+
+    <!-- ======== İŞLEMLER ======== -->
+    <main id="view-tx" class="view hidden">
+      <div class="search-row">
+        <div class="search-box">
+          <span class="search-ico" data-icon="search"></span>
+          <input id="search" type="text" placeholder="Ara…" autocapitalize="off" />
+        </div>
+        <select id="type-filter" class="mini-select">
+          <option value="">Tümü</option>
+          <option value="expense">Gider</option>
+          <option value="income">Gelir</option>
+        </select>
+        <select id="user-filter" class="mini-select"><option value="">Herkes</option></select>
+      </div>
+      <div id="tx-list" class="tx-list"></div>
+      <div id="tx-empty" class="empty hidden">📭 Bu aralıkta kayıt bulunamadı</div>
+    </main>
+
+    <!-- Bottom navigation -->
+    <nav class="bottomnav">
+      <button class="nav-item active" data-view="overview">
+        <span class="nav-ico" data-icon="layout-dashboard"></span><span>Özet</span>
+      </button>
+      <button class="fab" id="add-btn" aria-label="Kayıt ekle" data-icon="plus"></button>
+      <button class="nav-item" data-view="tx">
+        <span class="nav-ico" data-icon="receipt-text"></span><span>İşlemler</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- BOTTOM SHEET (add/edit) -->
+  <div id="sheet" class="sheet-overlay hidden">
+    <form id="tx-form" class="sheet">
+      <div class="sheet-handle"></div>
+      <h2 id="sheet-title">Kayıt Ekle</h2>
+      <input type="hidden" id="f-id" />
+
+      <div class="type-toggle" id="f-type-seg">
+        <button type="button" data-type="expense" class="active">Gider</button>
+        <button type="button" data-type="income">Gelir</button>
+      </div>
+
+      <div class="amount-input">
+        <input id="f-amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0" required />
+        <select id="f-currency" class="cur-select">
+          <option value="TL">₺</option>
+          <option value="EUR">€</option>
+          <option value="USD">$</option>
+          <option value="GBP">£</option>
+        </select>
+      </div>
+
+      <label class="field">
+        <span>Kategori</span>
+        <select id="f-category"></select>
+      </label>
+
+      <div class="field-row">
+        <label class="field">
+          <span>Tarih</span>
+          <input id="f-date" type="date" required />
+        </label>
+        <label class="field" id="f-inst-wrap">
+          <span>Taksit</span>
+          <input id="f-installments" type="number" inputmode="numeric" min="1" step="1" value="1" />
+        </label>
+      </div>
+
+      <label class="field">
+        <span>Açıklama</span>
+        <input id="f-description" type="text" placeholder="örn: market alışverişi" />
+      </label>
+
+      <label class="field">
+        <span>Kişi</span>
+        <input id="f-user" type="text" placeholder="örn: Buğra" />
+      </label>
+
+      <div id="sheet-error" class="form-error"></div>
+
+      <div class="sheet-actions">
+        <button type="submit" class="btn btn-primary btn-block">Kaydet</button>
+        <button type="button" id="sheet-delete" class="btn btn-danger btn-block hidden">Sil</button>
+        <button type="button" id="sheet-cancel" class="btn btn-ghost btn-block">İptal</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="vendor/chart.umd.min.js"></script>
+  <script src="icons.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
