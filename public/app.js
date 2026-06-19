@@ -131,6 +131,9 @@ function renderActiveFilter() {
 // ---------------------------------------------------------------------------
 const pad = (n) => String(n).padStart(2, '0');
 const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const DAY_MS = 86400000;
+const parseYmd = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const daysBetween = (a, b) => Math.round((parseYmd(b) - parseYmd(a)) / DAY_MS); // b - a (gün)
 const MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
 
 function applyPreset(name) {
@@ -193,7 +196,7 @@ const inRange = (r) => {
 // ---------------------------------------------------------------------------
 // Render
 // ---------------------------------------------------------------------------
-function render() { renderHero(); renderTrend(); renderPie(); renderCategories(); renderInstallments(); renderTx(); }
+function render() { renderHero(); renderTips(); renderTrend(); renderPie(); renderCategories(); renderInstallments(); renderTx(); }
 
 function periodRows() { return ALL.filter(inRange); }
 
@@ -317,6 +320,111 @@ function renderCategories() {
       </div>
       <div class="cat-bar"><i style="width:${w}%;background:${color}"></i></div>
     </div>`;
+  }).join('');
+}
+
+function saveComment(s) {
+  if (s >= 30) return 'mükemmel';
+  if (s >= 20) return 'sağlıklı';
+  if (s >= 10) return 'orta';
+  if (s >= 0) return 'düşük';
+  return 'açık veriyor';
+}
+
+function renderTips() {
+  const sec = $('tips-section');
+  const rows = periodRows();
+  if (!rows.length) { sec.classList.add('hidden'); return; }
+
+  const todayStr = ymd(new Date());
+  let totalExp = 0, totalInc = 0;
+  const byCat = {}, byDay = {};
+  for (const r of rows) {
+    const tl = toTL(r.amount, r.currency);
+    if (r.type === 'income') { totalInc += tl; }
+    else {
+      totalExp += tl;
+      byCat[r.category] = (byCat[r.category] || 0) + tl;
+      const d = dateOf(r); if (d) byDay[d] = (byDay[d] || 0) + tl;
+    }
+  }
+  const netSoFar = totalInc - totalExp;
+
+  // Dönem sınırları
+  const dates = rows.map(dateOf).filter(Boolean).sort();
+  const fromStr = range.from || dates[0];
+  const toStr = range.to || dates[dates.length - 1];
+  const includesToday = (!range.from || range.from <= todayStr) && (!range.to || range.to >= todayStr);
+  const effEnd = includesToday ? todayStr : toStr;
+  const daysElapsed = Math.max(1, daysBetween(fromStr, effEnd) + 1);
+
+  const tips = [];
+
+  // 1) Günlük ortalamalar
+  const avgExp = totalExp / daysElapsed, avgInc = totalInc / daysElapsed;
+  tips.push({ icon: 'gauge', color: 'var(--accent)',
+    html: `Günlük ortalama harcaman <b>${fmtTL(avgExp)}</b>${totalInc > 0 ? `, günlük ortalama gelirin <b>${fmtTL(avgInc)}</b>` : ''}.` });
+
+  // 2) Dönem sonuna kadar günlük bütçe (içinde bulunulan, sınırlı dönem)
+  if (includesToday && range.to) {
+    const daysRemaining = daysBetween(todayStr, range.to);
+    if (daysRemaining >= 1 && netSoFar > 0) {
+      tips.push({ icon: 'wallet', color: 'var(--income)',
+        html: `Dönem sonuna <b>${daysRemaining} gün</b> var. Günde en fazla <b>${fmtTL(netSoFar / daysRemaining)}</b> harcarsan net bakiyen artıda kalır.` });
+    }
+  }
+
+  // 3) Açık uyarısı
+  if (totalInc > 0 && netSoFar < 0) {
+    tips.push({ icon: 'triangle-alert', color: 'var(--expense)',
+      html: `Bu dönemde giderin gelirini <b>${fmtTL(-netSoFar)}</b> aştı. Harcamalarına dikkat!` });
+  }
+
+  // 4) Dönem sonu gider projeksiyonu
+  if (includesToday && range.to && avgExp > 0) {
+    const totalDays = daysBetween(fromStr, range.to) + 1;
+    if (totalDays > daysElapsed) {
+      tips.push({ icon: 'trending-up', color: 'var(--warn)',
+        html: `Bu hızla gidersen dönem sonu toplam giderin ~<b>${fmtTL(avgExp * totalDays)}</b> olur.` });
+    }
+  }
+
+  // 5) En çok harcanan kategori
+  const topCat = Object.entries(byCat).sort((a, b) => b[1] - a[1])[0];
+  if (topCat) {
+    const pct = totalExp > 0 ? Math.round((topCat[1] / totalExp) * 100) : 0;
+    tips.push({ iconCat: ['expense', topCat[0]], color: 'var(--accent)',
+      html: `En çok <b>${esc(catName('expense', topCat[0]))}</b> kategorisinde harcadın: <b>${fmtTL(topCat[1])}</b> (giderin %${pct}'si).` });
+  }
+
+  // 6) Tasarruf oranı
+  if (totalInc > 0) {
+    const rate = Math.round((netSoFar / totalInc) * 100);
+    tips.push({ icon: 'piggy-bank', color: 'var(--income)',
+      html: `Tasarruf oranın <b>%${rate}</b> — ${saveComment(rate)}.` });
+  }
+
+  // 7) Önümüzdeki 30 günde taksit yükü
+  const in30 = ymd(new Date(Date.now() + 30 * DAY_MS));
+  const upcoming = ALL.filter((r) => r.installment_count > 1 && dateOf(r) >= todayStr && dateOf(r) <= in30);
+  if (upcoming.length) {
+    const sum = upcoming.reduce((s, r) => s + toTL(r.amount, r.currency), 0);
+    tips.push({ icon: 'calendar-clock', color: 'var(--expense)',
+      html: `Önümüzdeki 30 günde <b>${fmtTL(sum)}</b> taksit ödemen var (${upcoming.length} taksit).` });
+  }
+
+  // 8) En çok harcanan gün
+  const topDay = Object.entries(byDay).sort((a, b) => b[1] - a[1])[0];
+  if (topDay && Object.keys(byDay).length > 1) {
+    tips.push({ icon: 'target', color: 'var(--warn)',
+      html: `En çok harcadığın gün <b>${dayHeading(topDay[0])}</b>: <b>${fmtTL(topDay[1])}</b>.` });
+  }
+
+  if (!tips.length) { sec.classList.add('hidden'); return; }
+  sec.classList.remove('hidden');
+  $('tips-list').innerHTML = tips.slice(0, 6).map((t) => {
+    const ic = t.iconCat ? catIcon(t.iconCat[0], t.iconCat[1]) : icon(t.icon);
+    return `<div class="tip"><span class="tip-ic" style="color:${t.color}">${ic}</span><div class="tip-text">${t.html}</div></div>`;
   }).join('');
 }
 

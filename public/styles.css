@@ -229,6 +229,19 @@ select { background-image: none; }
 .cat-bar { height: 7px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
 .cat-bar > i { display: block; height: 100%; border-radius: 999px; }
 
+/* Tips / Insights */
+.tips-panel {
+  background:
+    radial-gradient(120% 120% at 100% 0%, rgba(94, 234, 212, 0.08) 0%, transparent 55%),
+    var(--surface);
+}
+.tips-list { display: flex; flex-direction: column; gap: 14px; }
+.tip { display: flex; gap: 12px; align-items: flex-start; }
+.tip-ic { width: 34px; height: 34px; border-radius: 10px; background: var(--surface-2); display: grid; place-items: center; flex: 0 0 auto; }
+.tip-ic .ic { width: 18px; height: 18px; }
+.tip-text { font-size: 0.92rem; line-height: 1.5; color: var(--muted); padding-top: 4px; }
+.tip-text b { color: var(--text); font-weight: 700; }
+
 /* Installments */
 .inst-list { display: flex; flex-direction: column; gap: 10px; }
 .inst-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
