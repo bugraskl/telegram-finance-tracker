@@ -323,6 +323,12 @@ function renderCategories() {
   }).join('');
 }
 
+// Aylık tek seferlik / sabit giderler: günlük ortalama ve projeksiyona dahil edilmez
+const FIXED_EXPENSE_CATS = new Set(['kira_odeme', 'fatura', 'abonelik', 'vergi']);
+function isFixedExpense(r) {
+  return r.type === 'expense' && (FIXED_EXPENSE_CATS.has(r.category) || r.installment_count > 1);
+}
+
 function saveComment(s) {
   if (s >= 30) return 'mükemmel';
   if (s >= 20) return 'sağlıklı';
@@ -337,7 +343,7 @@ function renderTips() {
   if (!rows.length) { sec.classList.add('hidden'); return; }
 
   const todayStr = ymd(new Date());
-  let totalExp = 0, totalInc = 0;
+  let totalExp = 0, totalInc = 0, variableExp = 0, fixedExp = 0;
   const byCat = {}, byDay = {};
   for (const r of rows) {
     const tl = toTL(r.amount, r.currency);
@@ -346,6 +352,9 @@ function renderTips() {
       totalExp += tl;
       byCat[r.category] = (byCat[r.category] || 0) + tl;
       const d = dateOf(r); if (d) byDay[d] = (byDay[d] || 0) + tl;
+      // Sabit/aylık tek seferlik giderler (kira, fatura, abonelik, vergi, taksit)
+      // günlük ortalamaya ve projeksiyona dahil edilmez.
+      if (isFixedExpense(r)) fixedExp += tl; else variableExp += tl;
     }
   }
   const netSoFar = totalInc - totalExp;
@@ -360,10 +369,16 @@ function renderTips() {
 
   const tips = [];
 
-  // 1) Günlük ortalamalar
-  const avgExp = totalExp / daysElapsed, avgInc = totalInc / daysElapsed;
-  tips.push({ icon: 'gauge', color: 'var(--accent)',
-    html: `Günlük ortalama harcaman <b>${fmtTL(avgExp)}</b>${totalInc > 0 ? `, günlük ortalama gelirin <b>${fmtTL(avgInc)}</b>` : ''}.` });
+  // 1) Günlük ortalama harcama (sabit giderler hariç)
+  const avgVarDaily = variableExp / daysElapsed;
+  if (variableExp > 0) {
+    tips.push({ icon: 'gauge', color: 'var(--accent)',
+      html: `Günlük ortalama harcaman <b>${fmtTL(avgVarDaily)}</b> (kira, fatura, taksit gibi sabit giderler hariç).` });
+  }
+  if (fixedExp > 0) {
+    tips.push({ icon: 'receipt', color: 'var(--muted)',
+      html: `Bu dönemki sabit giderlerin (kira, fatura, abonelik, taksit) toplam <b>${fmtTL(fixedExp)}</b>.` });
+  }
 
   // 2) Dönem sonuna kadar günlük bütçe (içinde bulunulan, sınırlı dönem)
   if (includesToday && range.to) {
@@ -380,12 +395,13 @@ function renderTips() {
       html: `Bu dönemde giderin gelirini <b>${fmtTL(-netSoFar)}</b> aştı. Harcamalarına dikkat!` });
   }
 
-  // 4) Dönem sonu gider projeksiyonu
-  if (includesToday && range.to && avgExp > 0) {
+  // 4) Dönem sonu gider projeksiyonu: sabit giderler (bir kez) + değişken günlük ortalama × gün
+  if (includesToday && range.to && variableExp > 0) {
     const totalDays = daysBetween(fromStr, range.to) + 1;
     if (totalDays > daysElapsed) {
+      const projected = fixedExp + avgVarDaily * totalDays;
       tips.push({ icon: 'trending-up', color: 'var(--warn)',
-        html: `Bu hızla gidersen dönem sonu toplam giderin ~<b>${fmtTL(avgExp * totalDays)}</b> olur.` });
+        html: `Bu hızla gidersen dönem sonu toplam giderin ~<b>${fmtTL(projected)}</b> olur.` });
     }
   }
 
